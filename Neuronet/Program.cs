@@ -32,7 +32,7 @@ namespace Neuronet
       #region Title
       private static string NNExtension = ".nw";
       public static string TitleDefault = Application.ProductName;
-      public static string Title(string fileName)
+      public static string TitleFileName(string fileName)
       {
         if (Path.GetExtension(fileName) == NNExtension)
         {
@@ -259,16 +259,30 @@ namespace Neuronet
       }
       return Math.Sqrt(result/Neurons.Length);
     }
-    protected FSpeed Speed;
     #region Speed function
     protected delegate tfloat FSpeed(tfloat startSpeed, int epoch);
+    protected FSpeed Speed;
     protected static tfloat FSpeedConst(tfloat startSpeed, int epoch) { return startSpeed; }
     protected static tfloat FSpeedLinear(tfloat startSpeed, int epoch) { return startSpeed / epoch; }
     protected static tfloat FSpeedSqrt(tfloat startSpeed, int epoch) { return startSpeed / Math.Sqrt(epoch); }
     protected static tfloat FSpeedLn(tfloat startSpeed, int epoch) { return startSpeed / Math.Log(Math.E - 1 + epoch); }
     #endregion
-    public abstract void CorrectStart(int epoch, tfloat[] desired);
-    public abstract void CorrectContinue(int epoch);
+    #region Correct delegates/functions
+    protected delegate void CorrectStartDelegate(tfloat trainingSpeed, tfloat[] desired);
+    protected CorrectStartDelegate CorrectStartF;
+    protected delegate void CorrectContinueDelegate(tfloat trainingSpeed);
+    protected CorrectContinueDelegate CorrectContinueF;
+    public void CorrectStart(int epoch, tfloat[] desired)
+    {
+      tfloat trainingspeed = Speed(LP1, epoch);
+      CorrectStartF(trainingspeed, desired);
+    }
+    public void CorrectContinue(int epoch)
+    {
+      tfloat trainingspeed = Speed(LP1, epoch);
+      CorrectContinueF(trainingspeed);
+    }
+    #endregion
     public void GetOutput(tfloat[] forValues)
     {
       for (int i=0; i<=High; i++)
@@ -277,10 +291,9 @@ namespace Neuronet
       }
     }
   }
-  abstract class TLayerLinear : TLayerFunction
+  class TLayerLinear : TLayerFunction
   {
-    public TLayerLinear(byte lrt, byte lst, tfloat fp1, tfloat fp2, tfloat lp1, tfloat lp2, int count, int indexLayer) : base(Global.FIDLinear, lrt, lst, fp1, fp2, lp1, lp2, count, indexLayer) {}
-    private tfloat FLinear(tfloat sum, tfloat parameter) { return sum * parameter; }
+    private tfloat FLinear(tfloat sum, tfloat parameter) => sum * parameter;
     public override void Calculate()
     {
       for(int i=0; i<=High; i++)
@@ -288,56 +301,61 @@ namespace Neuronet
         Neurons[i].Out = FLinear(Neurons[i].Summate(),FP1);
       }
     }
-  }
-  class TLayerLinearStep : TLayerLinear
-  {
-    public TLayerLinearStep(byte lrt, byte lst, tfloat fp1, tfloat fp2, tfloat lp1, tfloat lp2, int count, int indexLayer) : base(lrt, lst, fp1, fp2, lp1, lp2, count, indexLayer) { }
-    public override void CorrectStart(int epoch, tfloat[] desired)
+    private void CorrectStartStep(tfloat trainingSpeed, tfloat[] desired)
     {
-      tfloat trainingspeed = Speed(LP1, epoch);
       for (int i = 0; i <= High; i++)
       {
         tfloat dCoeff = (desired[i] - Neurons[i].Out) * FP1;
-        Neurons[i].CorrectStartStep(dCoeff, dCoeff * trainingspeed);
+        Neurons[i].CorrectStartStep(dCoeff, dCoeff * trainingSpeed);
       }
     }
-    public override void CorrectContinue(int epoch)
+    private void CorrectContinueStep(tfloat trainingSpeed)
     {
-      tfloat trainingspeed = Speed(LP1, epoch);
-      for (int i = 0; i <= High; i++)
+      foreach (TNeuron Neuron in Neurons)
       {
-        tfloat dCoeff = Neurons[i].BPSum * FP1;
-        Neurons[i].CorrectContinueStep(dCoeff, dCoeff * trainingspeed);
+        tfloat dCoeff = Neuron.BPSum * FP1;
+        Neuron.CorrectContinueStep(dCoeff, dCoeff * trainingSpeed);
       }
     }
-  }
-  class TLayerLinearMomentum : TLayerLinear
-  {
-    public TLayerLinearMomentum(byte lrt, byte lst, tfloat fp1, tfloat fp2, tfloat lp1, tfloat lp2, int count, int indexLayer) : base(lrt, lst, fp1, fp2, lp1, lp2, count, indexLayer) { }
-    public override void CorrectStart(int epoch, tfloat[] desired)
+    private void CorrectStartMomentum(tfloat trainingSpeed, tfloat[] desired)
     {
-      tfloat trainingspeed = Speed(LP1, epoch);
       for (int i = 0; i <= High; i++)
       {
         tfloat dCoeff = (desired[i] - Neurons[i].Out) * FP1;
-        Neurons[i].CorrectStartMomentum(dCoeff, dCoeff * trainingspeed, LP2);
+        Neurons[i].CorrectStartMomentum(dCoeff, dCoeff * trainingSpeed, LP2);
       }
     }
-    public override void CorrectContinue(int epoch)
+    private void CorrectContinueMomentum(tfloat trainingSpeed)
+    {
+      foreach (TNeuron Neuron in Neurons)
       {
-        tfloat trainingspeed = Speed(LP1, epoch);
-        for (int i = 0; i <= High; i++)
+        tfloat dCoeff = Neuron.BPSum * FP1;
+        Neuron.CorrectContinueMomentum(dCoeff, dCoeff * trainingSpeed, LP2);
+      }
+    }
+    public TLayerLinear(byte lrt, byte lst, tfloat fp1, tfloat fp2, tfloat lp1, tfloat lp2, int count, int indexLayer) : base(Global.FIDLinear, lrt, lst, fp1, fp2, lp1, lp2, count, indexLayer)
+    {
+      switch (lrt)
+      {
+        case Global.LRTStep:
         {
-          tfloat dCoeff = Neurons[i].BPSum * FP1;
-          Neurons[i].CorrectContinueMomentum(dCoeff, dCoeff * trainingspeed, LP2);
+          CorrectStartF = CorrectStartStep;
+          CorrectContinueF = CorrectContinueStep;
+          break;
+        }
+        case Global.LRTMomentum:
+        {
+          CorrectStartF = CorrectStartMomentum;
+          CorrectContinueF = CorrectContinueMomentum;
+          break;
         }
       }
+    }
   }
-  abstract class TLayerLogistic : TLayerFunction
+  class TLayerLogistic : TLayerFunction
   {
-    public TLayerLogistic(byte lrt, byte lst, tfloat fp1, tfloat fp2, tfloat lp1, tfloat lp2, int count, int indexLayer) : base(Global.FIDLogistic, lrt, lst, fp1, fp2, lp1, lp2, count, indexLayer) { }
-    private tfloat FLogistic(tfloat sum, tfloat parameter) { return 1 / (1 + Math.Exp(-parameter * sum)); }
-    protected tfloat FDerivativeLogistic(tfloat outvalue) { return outvalue * (1 - outvalue); }
+    private tfloat FLogistic(tfloat sum, tfloat parameter) => 1 / (1 + Math.Exp(-parameter * sum));
+    private tfloat FDerivativeLogistic(tfloat outvalue) => outvalue * (1 - outvalue);
     public override void Calculate()
     {
       for (int i = 0; i <= High; i++)
@@ -345,56 +363,61 @@ namespace Neuronet
         Neurons[i].Out = FLogistic(Neurons[i].Summate(), FP1);
       }
     }
-  }
-  class TLayerLogisticStep : TLayerLogistic
-  {
-    public TLayerLogisticStep(byte lrt, byte lst, tfloat fp1, tfloat fp2, tfloat lp1, tfloat lp2, int count, int indexLayer) : base(lrt, lst, fp1, fp2, lp1, lp2, count, indexLayer) { }
-    public override void CorrectStart(int epoch, tfloat[] desired)
+    private void CorrectStartStep(tfloat trainingSpeed, tfloat[] desired)
     {
-      tfloat trainingspeed = Speed(LP1, epoch);
       for (int i = 0; i <= High; i++)
       {
         tfloat dCoeff = (desired[i] - Neurons[i].Out) * FDerivativeLogistic(Neurons[i].Out);
-        Neurons[i].CorrectStartStep(dCoeff, dCoeff * trainingspeed);
+        Neurons[i].CorrectStartStep(dCoeff, dCoeff * trainingSpeed);
       }
     }
-    public override void CorrectContinue(int epoch)
+    private void CorrectContinueStep(tfloat trainingSpeed)
     {
-      tfloat trainingspeed = Speed(LP1, epoch);
-      for (int i = 0; i <= High; i++)
+      foreach (TNeuron Neuron in Neurons)
       {
-        tfloat dCoeff = Neurons[i].BPSum * FDerivativeLogistic(Neurons[i].Out);
-        Neurons[i].CorrectContinueStep(dCoeff, dCoeff * trainingspeed);
+        tfloat dCoeff = Neuron.BPSum * FDerivativeLogistic(Neuron.Out);
+        Neuron.CorrectContinueStep(dCoeff, dCoeff * trainingSpeed);
       }
     }
-  }
-  class TLayerLogisticMomentum : TLayerLogistic
-  {
-    public TLayerLogisticMomentum(byte lrt, byte lst, tfloat fp1, tfloat fp2, tfloat lp1, tfloat lp2, int count, int indexLayer) : base(lrt, lst, fp1, fp2, lp1, lp2, count, indexLayer) { }
-    public override void CorrectStart(int epoch, tfloat[] desired)
+    private void CorrectStartMomentum(tfloat trainingSpeed, tfloat[] desired)
     {
-      tfloat trainingspeed = Speed(LP1, epoch);
       for (int i = 0; i <= High; i++)
       {
         tfloat dCoeff = (desired[i] - Neurons[i].Out) * FDerivativeLogistic(Neurons[i].Out);
-        Neurons[i].CorrectStartMomentum(dCoeff, dCoeff * trainingspeed, LP2);
+        Neurons[i].CorrectStartMomentum(dCoeff, dCoeff * trainingSpeed, LP2);
       }
     }
-    public override void CorrectContinue(int epoch)
+    private void CorrectContinueMomentum(tfloat trainingSpeed)
     {
-      tfloat trainingspeed = Speed(LP1, epoch);
-      for (int i = 0; i <= High; i++)
+      foreach (TNeuron Neuron in Neurons)
       {
-        tfloat dCoeff = Neurons[i].BPSum * FDerivativeLogistic(Neurons[i].Out);
-        Neurons[i].CorrectContinueMomentum(dCoeff, dCoeff * trainingspeed, LP2);
+        tfloat dCoeff = Neuron.BPSum * FDerivativeLogistic(Neuron.Out);
+        Neuron.CorrectContinueMomentum(dCoeff, dCoeff * trainingSpeed, LP2);
+      }
+    }
+    public TLayerLogistic(byte lrt, byte lst, tfloat fp1, tfloat fp2, tfloat lp1, tfloat lp2, int count, int indexLayer) : base(Global.FIDLogistic, lrt, lst, fp1, fp2, lp1, lp2, count, indexLayer)
+    {
+      switch (lrt)
+      {
+        case Global.LRTStep:
+        {
+          CorrectStartF = CorrectStartStep;
+          CorrectContinueF = CorrectContinueStep;
+          break;
+        }
+        case Global.LRTMomentum:
+        {
+          CorrectStartF = CorrectStartMomentum;
+          CorrectContinueF = CorrectContinueMomentum;
+          break;
+        }
       }
     }
   }
-  abstract class TLayerHTangent : TLayerFunction
+  class TLayerHTangent : TLayerFunction
   {
-    public TLayerHTangent(byte lrt, byte lst, tfloat fp1, tfloat fp2, tfloat lp1, tfloat lp2, int count, int indexLayer) : base(Global.FIDHTangent, lrt, lst, fp1, fp2, lp1, lp2, count, indexLayer) { }
-    private tfloat FHTangent(tfloat sum, tfloat parameter) { return Math.Tanh(sum / parameter); }
-    protected tfloat FDerivativeHTangent(tfloat outvalue) { return (1 + outvalue) * (1 - outvalue); }
+    private tfloat FHTangent(tfloat sum, tfloat parameter) => Math.Tanh(sum / parameter);
+    private tfloat FDerivativeHTangent(tfloat outvalue) => (1 + outvalue) * (1 - outvalue);
     public override void Calculate()
     {
       for (int i = 0; i <= High; i++)
@@ -402,48 +425,54 @@ namespace Neuronet
         Neurons[i].Out = FHTangent(Neurons[i].Summate(), FP1);
       }
     }
-  }
-  class TLayerHTangentStep : TLayerHTangent
-  {
-    public TLayerHTangentStep(byte lrt, byte lst, tfloat fp1, tfloat fp2, tfloat lp1, tfloat lp2, int count, int indexLayer) : base(lrt, lst, fp1, fp2, lp1, lp2, count, indexLayer) { }
-    public override void CorrectStart(int epoch, tfloat[] desired)
+    private void CorrectStartStep(tfloat trainingSpeed, tfloat[] desired)
     {
-      tfloat trainingspeed = Speed(LP1, epoch);
       for (int i = 0; i <= High; i++)
       {
         tfloat dCoeff = (desired[i] - Neurons[i].Out) * FDerivativeHTangent(Neurons[i].Out);
-        Neurons[i].CorrectStartStep(dCoeff, dCoeff * trainingspeed);
+        Neurons[i].CorrectStartStep(dCoeff, dCoeff * trainingSpeed);
       }
     }
-    public override void CorrectContinue(int epoch)
+    private void CorrectContinueStep(tfloat trainingSpeed)
     {
-      tfloat trainingspeed = Speed(LP1, epoch);
-      for (int i = 0; i <= High; i++)
+      foreach (TNeuron Neuron in Neurons)
       {
-        tfloat dCoeff = Neurons[i].BPSum * FDerivativeHTangent(Neurons[i].Out);
-        Neurons[i].CorrectContinueStep(dCoeff, dCoeff * trainingspeed);
+        tfloat dCoeff = Neuron.BPSum * FDerivativeHTangent(Neuron.Out);
+        Neuron.CorrectContinueStep(dCoeff, dCoeff * trainingSpeed);
       }
     }
-  }
-  class TLayerHTangentMomentum : TLayerHTangent
-  {
-    public TLayerHTangentMomentum(byte lrt, byte lst, tfloat fp1, tfloat fp2, tfloat lp1, tfloat lp2, int count, int indexLayer) : base(lrt, lst, fp1, fp2, lp1, lp2, count, indexLayer) { }
-    public override void CorrectStart(int epoch, tfloat[] desired)
+    private void CorrectStartMomentum(tfloat trainingSpeed, tfloat[] desired)
     {
-      tfloat trainingspeed = Speed(LP1, epoch);
       for (int i = 0; i <= High; i++)
       {
         tfloat dCoeff = (desired[i] - Neurons[i].Out) * FDerivativeHTangent(Neurons[i].Out);
-        Neurons[i].CorrectStartMomentum(dCoeff, dCoeff * trainingspeed, LP2);
+        Neurons[i].CorrectStartMomentum(dCoeff, dCoeff * trainingSpeed, LP2);
       }
     }
-    public override void CorrectContinue(int epoch)
+    private void CorrectContinueMomentum(tfloat trainingSpeed)
     {
-      tfloat trainingspeed = Speed(LP1, epoch);
-      for (int i = 0; i <= High; i++)
+      foreach (TNeuron Neuron in Neurons)
       {
-        tfloat dCoeff = Neurons[i].BPSum * FDerivativeHTangent(Neurons[i].Out);
-        Neurons[i].CorrectContinueMomentum(dCoeff, dCoeff * trainingspeed, LP2);
+        tfloat dCoeff = Neuron.BPSum * FDerivativeHTangent(Neuron.Out);
+        Neuron.CorrectContinueMomentum(dCoeff, dCoeff * trainingSpeed, LP2);
+      }
+    }
+    public TLayerHTangent(byte lrt, byte lst, tfloat fp1, tfloat fp2, tfloat lp1, tfloat lp2, int count, int indexLayer) : base(Global.FIDHTangent, lrt, lst, fp1, fp2, lp1, lp2, count, indexLayer)
+    {
+      switch (lrt)
+      {
+        case Global.LRTStep:
+        {
+          CorrectStartF = CorrectStartStep;
+          CorrectContinueF = CorrectContinueStep;
+          break;
+        }
+        case Global.LRTMomentum:
+        {
+          CorrectStartF = CorrectStartMomentum;
+          CorrectContinueF = CorrectContinueMomentum;
+          break;
+        }
       }
     }
   }
@@ -481,27 +510,9 @@ namespace Neuronet
       switch (fid)
       {
         case Global.FIDNone: Layers[index] = new TLayer(count, index); break;
-        case Global.FIDLinear:
-          switch (lrt)
-          {
-            case Global.LRTStep: Layers[index] = new TLayerLinearStep(lrt, lst, fp1, fp2, lp1, lp2, count, index); break;
-            case Global.LRTMomentum: Layers[index] = new TLayerLinearMomentum(lrt, lst, fp1, fp2, lp1, lp2, count, index); break;
-          }
-          break;
-        case Global.FIDLogistic:
-          switch (lrt)
-          {
-            case Global.LRTStep: Layers[index] = new TLayerLogisticStep(lrt, lst, fp1, fp2, lp1, lp2, count, index); break;
-            case Global.LRTMomentum: Layers[index] = new TLayerLogisticMomentum(lrt, lst, fp1, fp2, lp1, lp2, count, index); break;
-          }
-          break;
-        case Global.FIDHTangent:
-          switch (lrt)
-          {
-            case Global.LRTStep: Layers[index] = new TLayerHTangentStep(lrt, lst, fp1, fp2, lp1, lp2, count, index); break;
-            case Global.LRTMomentum: Layers[index] = new TLayerHTangentMomentum(lrt, lst, fp1, fp2, lp1, lp2, count, index); break;
-          }
-          break;
+        case Global.FIDLinear: Layers[index] = new TLayerLinear(lrt, lst, fp1, fp2, lp1, lp2, count, index); break;
+        case Global.FIDLogistic: Layers[index] = new TLayerLogistic(lrt, lst, fp1, fp2, lp1, lp2, count, index); break;
+        case Global.FIDHTangent: Layers[index] = new TLayerHTangent(lrt, lst, fp1, fp2, lp1, lp2, count, index); break;
       }
     }
     public void ConnectLayers(int indexStart, int indexEnd, bool randomizeEqually, tfloat[] areas)

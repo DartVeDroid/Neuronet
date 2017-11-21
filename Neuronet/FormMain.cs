@@ -31,7 +31,7 @@ namespace Neuronet
         if (Global.Neuronet.SaveToFile(saveFileDialog.FileName))
         {
           FileSaveToolStripMenuItem.Enabled = false;
-          Text = Global.Text.Title(saveFileDialog.FileName);
+          Text = Global.Text.TitleFileName(saveFileDialog.FileName);
           return true;
         }
         else
@@ -110,7 +110,7 @@ namespace Neuronet
         {
           Global.Neuronet = bufNeuronet;
           SetMenuItemsEnabled(false, true);
-          Text = Global.Text.Title(openFileDialog.FileName);
+          Text = Global.Text.TitleFileName(openFileDialog.FileName);
         }
       }
     }
