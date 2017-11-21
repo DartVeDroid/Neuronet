@@ -7,3 +7,6 @@
 ### v. 0.6.1
 + Step/Momentum classes->deligates + some reducing duplication.
 + Version -> build info.
+### v. 0.7
++ Serialization/Deserialization, deleted self-made save/load fields and methods.
++ Little code clearing.

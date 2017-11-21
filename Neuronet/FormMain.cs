@@ -105,10 +105,11 @@ namespace Neuronet
     {
       if (CanSaveGo() && (openFileDialog.ShowDialog() == DialogResult.OK))
       {
-        TNeuronet bufNeuronet = TNeuronet.LoadFromFile(openFileDialog.FileName);
-        if (bufNeuronet != null)
+        TNeuronet bufNeuronet = null;
+        if (TNeuronet.LoadFromFile(openFileDialog.FileName, ref bufNeuronet))
         {
           Global.Neuronet = bufNeuronet;
+          //DEV вставить задание пути
           SetMenuItemsEnabled(false, true);
           Text = Global.Text.TitleFileName(openFileDialog.FileName);
         }
@@ -138,14 +139,16 @@ namespace Neuronet
     private void TestToolStripMenuItem_Click(object sender, EventArgs e)
     {
       #region NN setting
-      Global.Neuronet = new TNeuronet(4);
-      Global.Neuronet.SetLayer(0, Global.FIDNone, 2);
-      Global.Neuronet.SetLayer(1, Global.FIDLogistic, 10, Global.LRTMomentum, Global.LSTLogistic, 1, 1, 0.2, 0);
-      Global.Neuronet.ConnectLayers(0, 1, true, new double[] { 0, 1 });
-      Global.Neuronet.SetLayer(2, Global.FIDHTangent, 10, Global.LRTMomentum, Global.LSTLogistic, 1, 1, 0.2, 0);
-      Global.Neuronet.ConnectLayers(1, 2, true, new double[] { 0, 1 });
-      Global.Neuronet.SetLayer(3, Global.FIDLinear, 1, Global.LRTMomentum, Global.LSTLogistic, 1, 1, 0.2, 0);
-      Global.Neuronet.ConnectLayers(2, 3, true, new double[] { 0, 1 });
+      //if (Global.Neuronet == null) {
+        Global.Neuronet = new TNeuronet(4);
+        Global.Neuronet.SetLayer(0, Global.FIDNone, 2);
+        Global.Neuronet.SetLayer(1, Global.FIDLogistic, 10, Global.LRTMomentum, Global.LSTLogistic, 1, 1, 0.2, 0);
+        Global.Neuronet.ConnectLayers(0, 1, true, new double[] { 0, 1 });
+        Global.Neuronet.SetLayer(2, Global.FIDHTangent, 10, Global.LRTMomentum, Global.LSTLogistic, 1, 1, 0.2, 0);
+        Global.Neuronet.ConnectLayers(1, 2, true, new double[] { 0, 1 });
+        Global.Neuronet.SetLayer(3, Global.FIDLinear, 1, Global.LRTMomentum, Global.LSTLogistic, 1, 1, 0.2, 0);
+        Global.Neuronet.ConnectLayers(2, 3, true, new double[] { 0, 1 });
+      //}
       FileSaveToolStripMenuItem.Enabled = true;
       FileSaveAsToolStripMenuItem.Enabled = true;
       FileCloseToolStripMenuItem.Enabled = true;

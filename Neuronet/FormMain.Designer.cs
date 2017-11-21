@@ -134,11 +134,11 @@
       // 
       // openFileDialog
       // 
-      this.openFileDialog.Filter = "Нейронная сеть (*.nw)|*.txt|Все файлы (*.*)|*.*";
+      this.openFileDialog.Filter = "Нейронная сеть (*.nw)|*.nw|Все файлы (*.*)|*.*";
       // 
       // saveFileDialog
       // 
-      this.saveFileDialog.Filter = "Нейронная сеть (*.nw)|*.txt|Все файлы (*.*)|*.*";
+      this.saveFileDialog.Filter = "Нейронная сеть (*.nw)|*.nw|Все файлы (*.*)|*.*";
       // 
       // chart
       // 
